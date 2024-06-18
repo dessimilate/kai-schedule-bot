@@ -7,7 +7,7 @@ import {
 	todayList,
 	tomorrowList
 } from '@/constants/buttons-names.constant'
-import { getDayInfo } from '@/utils/dayinfo-utils/getDayInfo'
+import { weekNumber } from '@/utils/dayinfo-utils/week-number'
 import { Markup } from 'telegraf'
 
 const {
@@ -15,19 +15,13 @@ const {
 	button: { callback }
 } = Markup
 
-export const schedulesButtons = () =>
+export const schedulesButtons = (idOdd = weekNumber().isOdd) =>
 	inlineKeyboard(
 		[
 			callback('Расписание на сегодня', todayList),
 			callback('Расписание на завтра', tomorrowList),
-			callback(
-				getDayInfo('week') % 2 ? 'Эта неделя' : 'Нечетная неделя',
-				oddWeek
-			),
-			callback(
-				getDayInfo('week') % 2 ? 'Четная неделя' : 'Эта неделя',
-				evenWeek
-			),
+			callback(idOdd ? 'Эта неделя' : 'Нечетная неделя', oddWeek),
+			callback(!idOdd ? 'Эта неделя' : 'Четная неделя', evenWeek),
 			callback('Расписание Экзаменов', examList),
 			callback('Расписание Пересдачи', reExamList),
 			callback('Назад', backToMain)

@@ -5,12 +5,12 @@ import {
 	InlineQuery,
 	Start,
 	Update,
-	Hears
+	Hears,
+	Command
 } from 'nestjs-telegraf'
 import { Telegraf } from 'telegraf'
 import { AppService } from '@/app.service'
 import { Context } from '@/types/context.interface'
-import { closeButton } from '@/buttons/close.button'
 import {
 	changeGroup,
 	evenWeek,
@@ -47,7 +47,7 @@ export class AppUpdate {
 		private readonly findByLecturersService: FindByLecturersService
 	) {}
 
-	/** Main Menu */
+	/** Main Menu */ 
 
 	@Start()
 	async startBot(@Ctx() ctx: Context) {
@@ -106,9 +106,19 @@ export class AppUpdate {
 		await this.scheduleMenuService.getSession(ctx)
 	}
 
-	@Action(reExamList)
-	async getReSession(@Ctx() ctx: Context) {
-		await this.scheduleMenuService.getReSession(ctx)
+	// @Action(reExamList)
+	// async getReSession(@Ctx() ctx: Context) {
+	// 	await this.scheduleMenuService.getReSession(ctx)
+	// }
+
+	@Command('today')
+	async getTodayCommand(@Ctx() ctx: Context) {
+		await this.scheduleMenuService.getTodayScheduleCommand(ctx)
+	}
+
+	@Command('tomorrow')
+	async getTomorrowCommand(@Ctx() ctx: Context) {
+		await this.scheduleMenuService.getTomorrowScheduleCommand(ctx)
 	}
 
 	/** Notification Menu */

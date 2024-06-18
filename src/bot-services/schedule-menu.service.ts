@@ -1,134 +1,145 @@
-import { schedulesKey } from '@/constants/scheduleKeys.constant'
 import { PrismaService } from '@/prisma.service'
 import { Context } from '@/types/context.interface'
-import { getDayInfo } from '@/utils/dayinfo-utils/getDayInfo'
-import { jsonParser } from '@/utils/jsonParser'
 import { Injectable } from '@nestjs/common'
 import { closeButton } from '@/buttons/close.button'
-import { ISchedule } from '@/types/main.type'
-import { returnDaySchedule } from '@/utils/display-utils/returnDaySchedule'
-import { returnWeekSchedule } from '@/utils/display-utils/returnWeekSchedule'
-import { returnReSessionSchedule } from '@/utils/display-utils/returnReSessionSchedule'
+import { getDayOfTheWeek } from '@/utils/dayinfo-utils/day-of-the-week'
+import { weekNumber } from '@/utils/dayinfo-utils/week-number'
+import { format, addDays } from 'date-fns'
+import { returnDaySchedule } from '@/utils/display-utils/day-schedule'
+import { returnWeekSchedule } from '@/utils/display-utils/week-schedule'
 
 @Injectable()
 export class ScheduleMenuService {
 	constructor(private prisma: PrismaService) {}
 
-	private async todayOrTomorrowSchedule(
-		ctx: Context,
-		is: 'today' | 'tomorrow'
-	) {
-		const data: ISchedule[] = jsonParser(
-			await this.prisma.schedule.findUnique({ where: { key: schedulesKey } })
-		)
+	private async todayOrTomorrowSchedule(ctx: Context, isToday = true) {
+		const course = ctx.session.group
 
-		const group = ctx.session.group
-		const dayOfWeek =
-			is === 'today' ? getDayInfo('dayOfWeek') : getDayInfo('tomorrowDay')
+		const { day, isOdd } = weekNumber()
 
-		const currentWeekSchedule = data.find(el => el.course === group)?.schedule[
-			getDayInfo('week') % 2 ? 'odd' : 'even'
-		]
+		const isNeedOdd = isToday ? isOdd : !day ? !isOdd : isOdd
 
-		if (!data || !currentWeekSchedule) {
-			await ctx.reply('Расписание отсутствует', closeButton())
+		const daySchedule = isNeedOdd
+			? await this.prisma.oddWeekSchedule.findUnique({
+					where: {
+						date_boardCourse: {
+							boardCourse: course,
+							date: format(addDays(new Date(), +!isToday), 'dd.MM')
+						}
+					},
+					select: { date: true, daySchedule: true }
+				})
+			: await this.prisma.evenWeekSchedule.findUnique({
+					where: {
+						date_boardCourse: {
+							boardCourse: course,
+							date: format(addDays(new Date(), +!isToday), 'dd.MM')
+						}
+					},
+					select: { date: true, daySchedule: true }
+				})
+
+		const dayOfWeek = isToday
+			? getDayOfTheWeek(day)
+			: getDayOfTheWeek(day === 6 ? 0 : day + 1)
+
+		if (!daySchedule) {
+			await ctx.reply(`${dayOfWeek} - выходной`, closeButton())
 			return
-		} else {
-			const currentDaySchedule = Object.entries(currentWeekSchedule).find(el =>
-				el[0].match(new RegExp(dayOfWeek, 'i'))
-			)
-
-			if (
-				!currentDaySchedule ||
-				!currentDaySchedule[1].filter(
-					el => el[0] && el[1] && !el[1].match(/(празд)|(выходн)/gi)
-				).length
-			) {
-				await ctx.reply(`${dayOfWeek} - выходной`, closeButton())
-				return
-			}
-
-			await ctx.replyWithHTML(
-				returnDaySchedule(currentDaySchedule),
-				closeButton()
-			)
 		}
+
+		const text = returnDaySchedule(daySchedule.daySchedule)
+
+		await ctx.reply(text, closeButton())
 	}
 
 	private async oddEvenSessionSchedule(
 		ctx: Context,
-		is: 'odd' | 'even' | 'session'
+		type: 'odd' | 'even' | 'session'
 	) {
-		const data: ISchedule[] = jsonParser(
-			await this.prisma.schedule.findUnique({ where: { key: schedulesKey } })
-		)
+		const course = ctx.session.group
 
-		const group = ctx.session.group
+		const weekSchedule =
+			type === 'odd'
+				? await this.prisma.oddWeekSchedule.findMany({
+						where: { boardCourse: course },
+						select: { date: true, daySchedule: true }
+					})
+				: type === 'even'
+					? await this.prisma.evenWeekSchedule.findMany({
+							where: { boardCourse: course },
+							select: { date: true, daySchedule: true }
+						})
+					: await this.prisma.session.findMany({
+							where: { boardCourse: course },
+							select: { date: true, daySchedule: true }
+						})
 
-		const currentWeekSchedule =
-			is === 'session'
-				? data.find(el => el.course === group)?.session
-				: data.find(el => el.course === group)?.schedule[is]
-
-		if (!data || !currentWeekSchedule) {
+		if (!weekSchedule) {
 			await ctx.reply('Расписание отсутствует', closeButton())
 			return
 		}
 
-		for (const [key, value] of Object.entries(currentWeekSchedule)) {
-			if (value.some(el => el[1].match(/(празд)|(выходн)|(библ)/gi))) {
-				currentWeekSchedule[key] = []
-				continue
-			}
+		const text = returnWeekSchedule(weekSchedule)
 
-			currentWeekSchedule[key] = value.filter(el => el[0] && el[1])
-		}
-
-		await ctx.replyWithHTML(
-			returnWeekSchedule(currentWeekSchedule),
-			closeButton()
-		)
+		await ctx.replyWithHTML(text, closeButton())
 	}
 
 	async getTodaySchedule(ctx: Context) {
-		await this.todayOrTomorrowSchedule(ctx, 'today')
+		await this.todayOrTomorrowSchedule(ctx)
 	}
 
 	async getTomorrowSchedule(ctx: Context) {
-		await this.todayOrTomorrowSchedule(ctx, 'tomorrow')
+		await this.todayOrTomorrowSchedule(ctx, false)
+	}
+
+	async getTodayScheduleCommand(ctx: Context) {
+		try {
+			await ctx.deleteMessage(ctx.update.message.message_id)
+		} catch {}
+
+		await this.todayOrTomorrowSchedule(ctx)
+	}
+
+	async getTomorrowScheduleCommand(ctx: Context) {
+		try {
+			await ctx.deleteMessage(ctx.update.message.message_id)
+		} catch {}
+
+		await this.todayOrTomorrowSchedule(ctx, false)
 	}
 
 	async getOddSchedule(ctx: Context) {
-		await this.oddEvenSessionSchedule(ctx, 'even')
+		await this.oddEvenSessionSchedule(ctx, 'odd')
 	}
 
 	async getEvenSchedule(ctx: Context) {
-		await this.oddEvenSessionSchedule(ctx, 'odd')
+		await this.oddEvenSessionSchedule(ctx, 'even')
 	}
 
 	async getSession(ctx: Context) {
 		await this.oddEvenSessionSchedule(ctx, 'session')
 	}
 
-	async getReSession(ctx: Context) {
-		const data: ISchedule[] = jsonParser(
-			await this.prisma.schedule.findUnique({ where: { key: schedulesKey } })
-		)
+	// async getReSession(ctx: Context) {
+	// 	const data: ISchedule[] = jsonParser(
+	// 		await this.prisma.schedule.findUnique({ where: { key: schedulesKey } })
+	// 	)
 
-		const group = ctx.session.group
+	// 	const group = ctx.session.group
 
-		const currentWeekSchedule = data.find(
-			el => el.course === group
-		)?.sessionRepeat
+	// 	const currentWeekSchedule = data.find(
+	// 		el => el.course === group
+	// 	)?.sessionRepeat
 
-		if (!data || !currentWeekSchedule) {
-			await ctx.reply('Расписание отсутствует', closeButton())
-			return
-		}
+	// 	if (!data || !currentWeekSchedule) {
+	// 		await ctx.reply('Расписание отсутствует', closeButton())
+	// 		return
+	// 	}
 
-		await ctx.replyWithHTML(
-			returnReSessionSchedule(currentWeekSchedule),
-			closeButton()
-		)
-	}
+	// 	await ctx.replyWithHTML(
+	// 		returnReSessionSchedule(currentWeekSchedule),
+	// 		closeButton()
+	// 	)
+	// }
 }

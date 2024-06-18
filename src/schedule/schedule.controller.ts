@@ -7,6 +7,6 @@ export class ScheduleController {
 
 	@Get()
 	async getSchedule() {
-		return await this.scheduleService.getTelegrafSessions()
+		// return await this.scheduleService.setLecturersSchedule()
 	}
 }

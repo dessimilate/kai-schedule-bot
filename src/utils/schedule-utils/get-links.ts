@@ -1,13 +1,13 @@
 import axios from 'axios'
-import { parseToHtml } from '@/utils/schedule-utils/parseToHtml'
+import { parseToHtml } from '@/utils/schedule-utils/parse-to-html'
 import { BadRequestException } from '@nestjs/common'
 
 export const getLinks = async () => {
-	const { data } = await axios.get<string>('https://alf-kai.ru/расписание/')
+	const { data } = await axios.get<string>(process.env.SCHEDULE_LINK)
 
 	if (!data) {
 		throw new BadRequestException(
-			'schedule page not found at link: https://alf-kai.ru/расписание/'
+			`schedule page not found at link: ${process.env.SCHEDULE_LINK}`
 		)
 	}
 

@@ -1,9 +1,8 @@
 import { closeButton } from '@/buttons/close.button'
-import { lecturersKey, schedulesKey } from '@/constants/scheduleKeys.constant'
+import { coursesKey } from '@/constants/info-db.constant'
 import { PrismaService } from '@/prisma.service'
 import { Context } from '@/types/context.interface'
-import { returnLecturers } from '@/utils/display-utils/returnLecturers'
-import { jsonParser } from '@/utils/jsonParser'
+import { returnLecturersSchedule } from '@/utils/display-utils/lecturers-schedule'
 import { Injectable } from '@nestjs/common'
 
 @Injectable()
@@ -11,40 +10,27 @@ export class FindByLecturersService {
 	constructor(private prisma: PrismaService) {}
 
 	async findByLecturers(ctx: Context) {
-		const names: string[] = jsonParser(
-			await this.prisma.schedule.findUnique({
-				where: { key: lecturersKey }
-			})
-		)
+		const lecturer = ctx.match[1]
 
-		const name = ctx.match[1]
+		const lecturersSchedule = await this.prisma.lecturersSchedule.findUnique({
+			where: { lecturer },
+			select: { lecturer: true, row: true }
+		})
 
-		if (!names.includes(name)) {
-			await ctx.reply('Такого преподавателя не существует', closeButton())
+		if (!lecturersSchedule.row.length) {
+			await ctx.reply('Нет расписания', closeButton())
 			return
 		}
 
-		const text = returnLecturers(
-			jsonParser(
-				await this.prisma.schedule.findUnique({ where: { key: schedulesKey } })
-			),
-			name
-		).reduce(
-			(res: string[], el) => {
-				const lastEL = res.pop()
-				if (lastEL.length + el.length > 4000) {
-					res.push(lastEL, el)
-				} else {
-					res.push(`${lastEL}\n\n${el}`)
-				}
+		const messages = returnLecturersSchedule(lecturersSchedule.row, lecturer)
 
-				return res
-			},
-			['']
-		)
+		if (!messages) {
+			await ctx.reply('Нет расписания', closeButton())
+			return
+		}
 
-		for (let i = 0; i < text.length; i++) {
-			await ctx.replyWithHTML(text[i], closeButton())
+		for (const message of messages) {
+			await ctx.replyWithHTML(message, closeButton())
 		}
 
 		try {

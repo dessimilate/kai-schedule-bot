@@ -1,8 +1,19 @@
 import { Context as ContextT } from 'telegraf'
 import { Chat, Update } from 'telegraf/typings/core/types/typegram'
 
-export type ntType = 'off' | 'default' | 'duringTheLesson' | 'atTheCertainTime'
+export type notificationType =
+	| 'off'
+	| 'default'
+	| 'duringTheLesson'
+	| 'atTheCertainTime'
+
 export type menuBtnType = 'main' | 'schedules' | 'notification'
+
+export enum Roles {
+	moderator = 'moderator',
+	admin = 'admin',
+	superAdmin = 'super admin'
+}
 
 export type sessionType = {
 	update_id: number
@@ -10,9 +21,10 @@ export type sessionType = {
 	start_message_id: number
 	first_name: string
 	last_name: string
-	notification_type: ntType
+	notification_type: notificationType
 	menu_button_type: menuBtnType
-	notification_time: [number, number]
+	notification_time: string
+	role: Roles
 }
 
 export interface Context extends ContextT {
@@ -38,9 +50,6 @@ export interface Context extends ContextT {
 			chat: {
 				id: number
 			}
-		}
-	} & {
-		message: {
 			message_id: number
 		}
 	}

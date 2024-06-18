@@ -7,9 +7,131 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Schedule {
-  key   String @unique
-  value String
+model Board {
+  course String @unique
+
+  oddSchedule  OddWeekSchedule[]
+  evenSchedule EvenWeekSchedule[]
+
+  session Session[]
+
+  resession Resession[]
+}
+
+model OddWeekSchedule {
+  date        String
+  daySchedule OddScheduleRow[]
+
+  board       Board  @relation(fields: [boardCourse], references: [course])
+  boardCourse String @map("board_course")
+
+  @@id([date, boardCourse])
+}
+
+model EvenWeekSchedule {
+  date        String
+  daySchedule EvenScheduleRow[]
+
+  board       Board  @relation(fields: [boardCourse], references: [course])
+  boardCourse String @map("board_course")
+
+  @@id([date, boardCourse])
+}
+
+model Session {
+  date        String
+  daySchedule SessionRow[]
+
+  board       Board  @relation(fields: [boardCourse], references: [course])
+  boardCourse String @map("board_course")
+
+  @@id([date, boardCourse])
+}
+
+model Resession {
+  date        String
+  daySchedule ResessionRow[]
+
+  board       Board  @relation(fields: [boardCourse], references: [course])
+  boardCourse String @map("board_course")
+
+  @@id([date, boardCourse])
+}
+
+model OddScheduleRow {
+  time      String
+  text      String
+  lecturer  String
+  classroom String
+
+  dddWeekSchedule            OddWeekSchedule @relation(fields: [oddWeekScheduleDate, oddWeekScheduleBoardCourse], references: [date, boardCourse])
+  oddWeekScheduleDate        String          @map("odd_week_schedule_date")
+  oddWeekScheduleBoardCourse String          @map("odd_week_schedule_course")
+
+  @@id([time, oddWeekScheduleDate, oddWeekScheduleBoardCourse])
+}
+
+model EvenScheduleRow {
+  time      String
+  text      String
+  lecturer  String
+  classroom String
+
+  evenWeekSchedule            EvenWeekSchedule @relation(fields: [evenWeekScheduleDate, evenWeekScheduleBoardCourse], references: [date, boardCourse])
+  evenWeekScheduleDate        String           @map("even_week_schedule_date")
+  evenWeekScheduleBoardCourse String           @map("even_week_schedule_course")
+
+  @@id([time, evenWeekScheduleDate, evenWeekScheduleBoardCourse])
+}
+
+model SessionRow {
+  time      String
+  text      String
+  lecturer  String
+  classroom String
+
+  session            Session @relation(fields: [sessionDate, sessionBoardCourse], references: [date, boardCourse])
+  sessionDate        String  @map("session_date")
+  sessionBoardCourse String  @map("session_course")
+
+  @@id([time, sessionDate, sessionBoardCourse])
+}
+
+model ResessionRow {
+  time      String
+  text      String
+  lecturer  String
+  classroom String
+
+  resession            Resession @relation(fields: [resessionDate, resessionBoardCourse], references: [date, boardCourse])
+  resessionDate        String    @map("resession_date")
+  resessionBoardCourse String    @map("resession_course")
+
+  @@id([time, resessionDate, resessionBoardCourse])
+}
+
+model Info {
+  key   String   @unique
+  value String[]
+}
+
+model LecturersSchedule {
+  lecturer String                 @id
+  row      LecturersScheduleRow[]
+}
+
+model LecturersScheduleRow {
+  id String @id @default(cuid())
+
+  time      String
+  text      String
+  date      String
+  course    String
+  classroom String
+
+  lecturersSchedule LecturersSchedule[]
+
+  @@unique([time, date, course])
 }
 
 model telegrafSessions {

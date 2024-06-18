@@ -12,6 +12,7 @@ import { ScheduleMenuService } from '@/bot-services/schedule-menu.service'
 		PrismaService,
 		AppService,
 		ScheduleMenuService
-	]
+	],
+	exports: [NotificationModule]
 })
 export class NotificationModule {}

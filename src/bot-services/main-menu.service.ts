@@ -1,21 +1,21 @@
 import { Context } from '@/types/context.interface'
-import { getMenuOptions } from '@/utils/bot-utils/getMenuOptions'
-import { sendFirstEntryMenu } from '@/utils/bot-utils/sendFirstEntryMenu'
-import { sendMainMenu } from '@/utils/bot-utils/sendMainMenu'
-import { sendNotificationMenu } from '@/utils/bot-utils/sendNotificationMenu'
-import { sendScheduleMenu } from '@/utils/bot-utils/sendScheduleMenu'
-import { getDayInfo } from '@/utils/dayinfo-utils/getDayInfo'
+import { sendFirstEntryMenu } from '@/utils/bot-utils/first-entry-menu'
+import { editMainMenu, sendMainMenu } from '@/utils/bot-utils/main-menu'
+import {
+	editNotificationMenu,
+	sendNotificationMenu
+} from '@/utils/bot-utils/notification-menu'
+import {
+	sendScheduleMenu,
+	editScheduleMenu
+} from '@/utils/bot-utils/schedule-menu'
 import { Injectable } from '@nestjs/common'
-import { schedulesButtons } from '@/buttons/schedules.buttons'
-import { mainButtons } from '@/buttons/main.buttons'
-import { notificationsButtons } from '@/buttons/notification.buttons'
 import { PrismaService } from '@/prisma.service'
-import { groupsKey, lecturersKey } from '@/constants/scheduleKeys.constant'
-import { jsonParser } from '@/utils/jsonParser'
 import {
 	changeGroup,
 	findByLecturers
 } from '@/constants/buttons-names.constant'
+import { coursesKey, lecturersKey } from '@/constants/info-db.constant'
 
 @Injectable()
 export class MainMenuService {
@@ -24,8 +24,7 @@ export class MainMenuService {
 	async start(ctx: Context) {
 		if (!ctx.session.menu_button_type) ctx.session.menu_button_type = 'main'
 		if (!ctx.session.notification_type) ctx.session.notification_type = 'off'
-		ctx.session.first_name = ctx.chat.first_name || ''
-		ctx.session.last_name = ctx.chat.last_name || ''
+		if (!ctx.session.notification_time) ctx.session.notification_time = '17:00'
 
 		const { group, start_message_id, menu_button_type } = ctx.session
 
@@ -47,23 +46,15 @@ export class MainMenuService {
 				await ctx.deleteMessage(ctx.update.message.message_id)
 			} catch {}
 		}
-
-		ctx.session.start_message_id = message.message_id
 	}
 
 	async displayScheduleMenu(ctx: Context) {
 		ctx.session.menu_button_type = 'schedules'
 
 		try {
-			await ctx.editMessageText(
-				getDayInfo('info', getMenuOptions(ctx)),
-				schedulesButtons()
-			)
+			await editScheduleMenu(ctx)
 		} catch {
-			await ctx.replyWithHTML(
-				getDayInfo('info', getMenuOptions(ctx)),
-				schedulesButtons()
-			)
+			await sendScheduleMenu(ctx)
 		}
 	}
 
@@ -71,31 +62,26 @@ export class MainMenuService {
 		ctx.session.menu_button_type = 'notification'
 
 		try {
-			await ctx.editMessageText(
-				getDayInfo('info', getMenuOptions(ctx)),
-				notificationsButtons(ctx.session.notification_type || 'off')
-			)
+			await editNotificationMenu(ctx)
 		} catch {
-			await ctx.replyWithHTML(
-				getDayInfo('info', getMenuOptions(ctx)),
-				notificationsButtons(ctx.session.notification_type || 'off')
-			)
+			await sendNotificationMenu(ctx)
 		}
 	}
 
 	async getByGroup(ctx: Context) {
-		const groupList: string[] = jsonParser(
-			await this.prisma.schedule.findUnique({
-				where: { key: groupsKey }
+		const courses = (
+			await this.prisma.info.findUnique({
+				where: { key: coursesKey }
 			})
-		)
+		).value
 
-		if (!groupList) return
+		if (!courses) return
 
 		const searchParams = ctx.inlineQuery.query.slice(changeGroup.length)
 
 		await ctx.answerInlineQuery(
-			groupList
+			courses
+				.sort()
 				.filter(el => new RegExp(searchParams, 'gi').test(el))
 				.map((name, i) => ({
 					id: String(i),
@@ -107,14 +93,17 @@ export class MainMenuService {
 	}
 
 	async getByLecturers(ctx: Context) {
-		const namesList: string[] = jsonParser(
-			await this.prisma.schedule.findUnique({ where: { key: lecturersKey } })
-		)
+		const lecturers = (
+			await this.prisma.info.findUnique({
+				where: { key: lecturersKey }
+			})
+		).value
 
 		const searchParams = ctx.inlineQuery.query.slice(findByLecturers.length)
 
 		await ctx.answerInlineQuery(
-			namesList 
+			lecturers
+				.sort()
 				.filter(el => el.match(new RegExp(searchParams, 'gi')) !== null)
 				.map((name, i) => ({
 					id: String(i),
@@ -129,15 +118,9 @@ export class MainMenuService {
 		ctx.session.menu_button_type = 'main'
 
 		try {
-			await ctx.editMessageText(
-				getDayInfo('info', getMenuOptions(ctx)),
-				mainButtons()
-			)
+			await editMainMenu(ctx)
 		} catch {
-			await ctx.replyWithHTML(
-				getDayInfo('info', getMenuOptions(ctx)),
-				mainButtons()
-			)
+			await sendMainMenu(ctx)
 		}
 	}
 }

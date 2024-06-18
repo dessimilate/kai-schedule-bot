@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  back:
+    build: ./
+    container_name: bot-back
+    ports:
+      - '4201:4201'
+    

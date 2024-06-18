@@ -5,7 +5,8 @@ import {
 	defaultNotifications,
 	setNotificationTime
 } from '@/constants/buttons-names.constant'
-import { ntType } from '@/types/context.interface'
+import { notificationButtonText } from '@/constants/notification-text.constant'
+import { sessionType } from '@/types/context.interface'
 import { Markup } from 'telegraf'
 
 const {
@@ -13,23 +14,28 @@ const {
 	button: { callback, switchToCurrentChat }
 } = Markup
 
-export const notificationsButtons = (type: ntType) =>
+export const notificationsButtons = ({
+	notification_time,
+	notification_type
+}: sessionType) =>
 	inlineKeyboard(
 		[
 			callback(
-				`${type === 'off' ? '✅' : ''}Выключить уведомления`,
+				notificationButtonText(notification_type, notification_time).off,
 				offNotifications
 			),
 			callback(
-				`${type === 'default' ? '✅' : ''}По умолчанию(в 17:00)`,
+				notificationButtonText(notification_type, notification_time).default,
 				defaultNotifications
 			),
 			switchToCurrentChat(
-				`${type === 'atTheCertainTime' ? '✅' : ''}Выбрать время`,
+				notificationButtonText(notification_type, notification_time)
+					.atTheCertainTime,
 				setNotificationTime
 			),
 			callback(
-				`${type === 'duringTheLesson' ? '✅' : ''}Уведомления перед последней парой`,
+				notificationButtonText(notification_type, notification_time)
+					.duringTheLesson,
 				beforeLastLesson
 			),
 			callback(`Назад`, backToMain)

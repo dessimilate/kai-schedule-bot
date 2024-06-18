@@ -6,9 +6,9 @@ import { session } from 'telegraf'
 import { TelegrafModule } from 'nestjs-telegraf'
 import { ScheduleModule } from '@nestjs/schedule'
 import { Postgres } from '@telegraf/session/pg'
-import { AppUpdate } from '@/app.update'
 import { PrismaService } from '@/prisma.service'
 import { ScheduleModule as ScheduleM } from '@/schedule/schedule.module'
+import { AppUpdate } from '@/app.update'
 import { NotificationModule } from '@/notification/notification.module'
 import { MainMenuService } from '@/bot-services/main-menu.service'
 import { ScheduleMenuService } from '@/bot-services/schedule-menu.service'
@@ -38,8 +38,8 @@ const store = Postgres({
 	controllers: [AppController],
 	providers: [
 		AppService,
-		AppUpdate,
 		PrismaService,
+		AppUpdate,
 		MainMenuService,
 		ScheduleMenuService,
 		NotificationMenuService,

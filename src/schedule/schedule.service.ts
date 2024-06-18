@@ -1,278 +1,343 @@
-import {
-	groupsKey,
-	lecturersKey,
-	schedulesKey
-} from '@/constants/scheduleKeys.constant'
+import { dayLib } from '@/constants/dayoffs-phrases.constant'
+import { coursesKey, lecturersKey } from '@/constants/info-db.constant'
 import { PrismaService } from '@/prisma.service'
-import { Context } from '@/types/context.interface'
-import { ISchedule } from '@/types/main.type'
-import { getLinks } from '@/utils/schedule-utils/getLinks'
-import { parseFromLink } from '@/utils/schedule-utils/parseFromLink'
+import { findDateInText } from '@/utils/find-date-in-text'
+import { getLinks } from '@/utils/schedule-utils/get-links'
+import { parseLink } from '@/utils/schedule-utils/parse-from-link/parse-link'
+import { parseTextToInfo } from '@/utils/schedule-utils/parse-text-to-info'
 import { Injectable } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { format } from 'date-fns'
-import { uniq } from 'lodash'
-import { InjectBot } from 'nestjs-telegraf'
-import { Telegraf } from 'telegraf'
+import { union, uniq } from 'lodash'
+
+export interface IInfo {
+	courses: string[]
+	lecturers: string[]
+}
 
 @Injectable()
 export class ScheduleService {
-	constructor(
-		@InjectBot() private readonly bot: Telegraf<Context>,
-		private prisma: PrismaService
-	) {}
+	constructor(private prisma: PrismaService) {}
+
+	@Cron(CronExpression.EVERY_HOUR)
+	private async setSchedules() {
+		console.log(`${format(new Date(), 'y.MM.dd HH:mm:ss')} - schedule update`)
+
+		const { schedule, session, sessionRepeat } = await getLinks()
+
+		const { courses: c1, lecturers: l1 } =
+			await this.parseFromScheduleArray(schedule)
+
+		const { courses: c2, lecturers: l2 } =
+			await this.parseFromSessionArray(session)
+
+		const lecturers = union(l1, l2)
+		const courses = union(c1, c2)
+
+		await this.prisma.$transaction([
+			this.prisma.info.upsert({
+				where: { key: coursesKey },
+				create: { key: coursesKey, value: courses },
+				update: { value: courses }
+			}),
+			this.prisma.info.upsert({
+				where: { key: lecturersKey },
+				create: { key: lecturersKey, value: lecturers },
+				update: { value: lecturers }
+			})
+		])
+
+		console.log('schedule update completed\n')
+	}
+
+	@Cron(CronExpression.EVERY_HOUR)
+	private async setLecturersSchedule() {
+		console.log(`${format(new Date(), 'y.MM.dd HH:mm:ss')} - lecturers update`)
+
+		const lecturers = (
+			await this.prisma.info.findUnique({
+				where: { key: lecturersKey }
+			})
+		)?.value
+
+		if (lecturers) {
+			for (const lecturer of lecturers) {
+				const oddLecturers = await this.prisma.oddScheduleRow.findMany({
+					where: { lecturer }
+				})
+
+				const evenLecturers = await this.prisma.evenScheduleRow.findMany({
+					where: { lecturer }
+				})
+
+				const sessionLecturers = await this.prisma.sessionRow.findMany({
+					where: { lecturer }
+				})
+
+				const data = [
+					...oddLecturers.map(el => ({
+						time: el.time,
+						text: el.text,
+						date: el.oddWeekScheduleDate,
+						course: el.oddWeekScheduleBoardCourse,
+						classroom: el.classroom
+					})),
+					...evenLecturers.map(el => ({
+						time: el.time,
+						text: el.text,
+						date: el.evenWeekScheduleDate,
+						course: el.evenWeekScheduleBoardCourse,
+						classroom: el.classroom
+					})),
+					...sessionLecturers.map(el => ({
+						time: el.time,
+						text: el.text,
+						date: el.sessionDate,
+						course: el.sessionBoardCourse,
+						classroom: el.classroom
+					}))
+				]
+
+				for (const dataElement of data) {
+					const { course, date, time } = dataElement
+
+					try {
+						this.prisma.lecturersSchedule.upsert({
+							where: { lecturer },
+							create: {
+								lecturer,
+								row: { create: dataElement }
+							},
+							update: {
+								row: {
+									upsert: {
+										where: { time_date_course: { time, date, course } },
+										create: dataElement,
+										update: dataElement
+									}
+								}
+							}
+						})
+					} catch {
+						console.log(`error with ${course} ${date} ${time}`)
+					}
+				}
+			}
+		}
+
+		console.log('lecturers completed')
+	}
 
 	private getIndexSchedule(index: number) {
 		return 8 * Math.floor(index / 4) + (index % 4)
 	}
 
-	@Cron(CronExpression.EVERY_HOUR)
-	private async setSchedules() {
-		console.log(
-			`****\n${format(new Date(), 'y.MM.dd HH:mm:ss')}\nstart of update\n****\n`
-		)
+	private async parseFromScheduleArray(links: string[]): Promise<IInfo> {
+		const dataToReturn: IInfo = {
+			courses: [],
+			lecturers: []
+		}
 
-		const scheduleData: ISchedule[] = []
-		const sessionData: ISchedule[] = []
-		const sessionRepeatData: ISchedule[] = []
-		const courses: string[] = []
-		const generalData: ISchedule[] = []
-
-		const { schedule, session, sessionRepeat } = await getLinks()
-
-		for (let f = 0; this.getIndexSchedule(f) < schedule.length; f++) {
+		for (let f = 0; this.getIndexSchedule(f) < links?.length; f++) {
 			const i = this.getIndexSchedule(f)
 
-			const arr1 = await parseFromLink(schedule[i])
-			const arr2 = await parseFromLink(schedule[i + 4])
+			const scheduleOdd = await parseLink(links[i])
+			const scheduleEven = await parseLink(links[i + 4])
 
-			// if (!arr1.length || !arr2.length) {
-			// 	console.log(`problem with schedule\nindex in table ${f}\n`)
-			// }
-
-			if (!arr1.length) arr1.push({ dataTable: [], coursesNames: [] })
-			if (!arr2.length) arr2.push({ dataTable: [], coursesNames: [] })
-
-			const { coursesNames: cn1, dataTable: oddTable } = arr1[0]
-			const { coursesNames: cn2, dataTable: evenTable } = arr2[0]
-			const coursesNames = cn1.length >= cn2.length ? cn1 : cn2
-
-			coursesNames.forEach(course => {
-				if (!courses.includes(course)) {
-					courses.push(course)
-				}
-			})
-
-			scheduleData.push(
-				...coursesNames.reduce((res: ISchedule[], course, m) => {
-					const courseSchedule: ISchedule = {
-						course,
-						schedule: { odd: {}, even: {} }
-					}
-
-					const courseIndex = 1 + m * 2
-
-					oddTable.forEach(row => {
-						if (row[courseIndex + 1] || row[courseIndex]) {
-							if (courseSchedule.schedule.odd[row[0]]) {
-								courseSchedule.schedule.odd[row[0]].push([
-									row[courseIndex],
-									row[courseIndex + 1]
-								])
-							} else {
-								courseSchedule.schedule.odd[row[0]] = [
-									[row[courseIndex], row[courseIndex + 1]]
-								]
-							}
-						}
-					})
-
-					evenTable.forEach(row => {
-						if (row[courseIndex + 1] || row[courseIndex]) {
-							if (courseSchedule.schedule.even[row[0]]) {
-								courseSchedule.schedule.even[row[0]].push([
-									row[courseIndex],
-									row[courseIndex + 1]
-								])
-							} else {
-								courseSchedule.schedule.even[row[0]] = [
-									[row[courseIndex], row[courseIndex + 1]]
-								]
-							}
-						}
-					})
-
-					return [...res, courseSchedule]
-				}, [])
-			)
-		}
-
-		for (let f = 0; f < session.length; f++) {
-			const arr = await parseFromLink(session[f])
-
-			// if (!arr.length) {
-			// 	console.log(`problem with session\nindex in table ${f}\n`)
-			// }
-
-			if (!arr.length) arr.push({ dataTable: [], coursesNames: [] })
-
-			const { coursesNames, dataTable } = arr[0]
-
-			coursesNames.forEach(course => {
-				if (!courses.includes(course)) {
-					courses.push(course)
-				}
-			})
-
-			sessionData.push(
-				...coursesNames.reduce((res: ISchedule[], course, m) => {
-					const courseSchedule: ISchedule = {
-						course,
-						session: {}
-					}
-
-					const courseIndex = 1 + m * 2
-
-					dataTable.forEach(row => {
-						if (row[courseIndex + 1] && row[courseIndex]) {
-							if (courseSchedule.session[row[0]]) {
-								courseSchedule.session[row[0]].push([
-									row[courseIndex],
-									row[courseIndex + 1]
-								])
-							} else {
-								courseSchedule.session[row[0]] = [
-									[row[courseIndex], row[courseIndex + 1]]
-								]
-							}
-						}
-					})
-
-					return [...res, courseSchedule]
-				}, [])
-			)
-		}
-
-		const dataSR = await parseFromLink(sessionRepeat)
-
-		if (!dataSR.length) {
-			console.log('problem with resession\n')
-		} else {
-			for (let i = 0; i < dataSR.length; i++) {
-				const { coursesNames, dataTable } = dataSR[i]
-
-				coursesNames.forEach(course => {
-					if (!courses.includes(course)) {
-						courses.push(course)
-					}
-				})
-
-				sessionRepeatData.push(
-					...coursesNames.reduce((res: ISchedule[], course, m) => {
-						const courseSchedule: ISchedule = {
-							course,
-							sessionRepeat: []
-						}
-
-						const currInd = m * 3
-
-						dataTable.slice(1).forEach(row => {
-							if (row[currInd + 2] || row[currInd + 1] || row[currInd]) {
-								courseSchedule.sessionRepeat.push([
-									row[currInd],
-									row[currInd + 1],
-									row[currInd + 2]
-								])
-							}
-						})
-
-						return [...res, courseSchedule]
-					}, [])
+			dataToReturn.courses.push(
+				...union(
+					scheduleOdd?.coursesNames || [],
+					scheduleEven?.coursesNames || []
 				)
+			)
+
+			await this.prisma.$transaction(
+				dataToReturn.courses.map(course =>
+					this.prisma.board.upsert({
+						where: { course },
+						create: { course },
+						update: {}
+					})
+				)
+			)
+
+			if (scheduleOdd?.coursesNames?.length) {
+				const { coursesNames: oddCourses, dataTable: oddTable } = scheduleOdd
+
+				for (const [m, course] of Object.entries(oddCourses)) {
+					const col = 1 + +m * 2
+
+					await this.prisma.$transaction(
+						oddTable
+							.filter(
+								row =>
+									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
+							)
+							.map(row => {
+								const rowDate = findDateInText(row[0])
+								const info = parseTextToInfo(row[col], row[col + 1])
+
+								dataToReturn.lecturers.push(info.lecturer)
+
+								return this.prisma.oddWeekSchedule.upsert({
+									where: {
+										date_boardCourse: { date: rowDate, boardCourse: course }
+									},
+									create: {
+										date: rowDate,
+										daySchedule: { create: info },
+										boardCourse: course
+									},
+									update: {
+										daySchedule: {
+											upsert: {
+												where: {
+													time_oddWeekScheduleDate_oddWeekScheduleBoardCourse: {
+														time: info.time,
+														oddWeekScheduleDate: rowDate,
+														oddWeekScheduleBoardCourse: course
+													}
+												},
+												create: info,
+												update: info
+											}
+										}
+									}
+								})
+							})
+					)
+				}
+			}
+
+			if (scheduleEven?.coursesNames?.length) {
+				const { coursesNames: evenCourses, dataTable: evenTable } = scheduleEven
+
+				for (const [m, course] of Object.entries(evenCourses)) {
+					const col = 1 + +m * 2
+
+					await this.prisma.$transaction(
+						evenTable
+							.filter(
+								row =>
+									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
+							)
+							.map(row => {
+								const rowDate = findDateInText(row[0])
+								const info = parseTextToInfo(row[col], row[col + 1])
+
+								dataToReturn.lecturers.push(info.lecturer)
+
+								return this.prisma.evenWeekSchedule.upsert({
+									where: {
+										date_boardCourse: { date: rowDate, boardCourse: course }
+									},
+									create: {
+										date: rowDate,
+										daySchedule: { create: info },
+										boardCourse: course
+									},
+									update: {
+										daySchedule: {
+											upsert: {
+												where: {
+													time_evenWeekScheduleDate_evenWeekScheduleBoardCourse:
+														{
+															time: info.time,
+															evenWeekScheduleDate: rowDate,
+															evenWeekScheduleBoardCourse: course
+														}
+												},
+												create: info,
+												update: info
+											}
+										}
+									}
+								})
+							})
+					)
+				}
 			}
 		}
 
-		courses.forEach(course => {
-			generalData.push({
-				course,
-				schedule: scheduleData.find(el => el.course === course)?.schedule,
-				session: sessionData.find(el => el.course === course)?.session,
-				sessionRepeat: sessionRepeatData.find(el => el.course === course)
-					?.sessionRepeat
-			})
-		})
-
-		// const oldData = await this.prisma.schedule.findUnique({
-		// 	where: { key: 'schedule' }
-		// })
-
-		// if (oldData) {
-		// }
-
-		await this.prisma.schedule.upsert({
-			where: { key: schedulesKey },
-			create: { key: schedulesKey, value: JSON.stringify(generalData) },
-			update: { value: JSON.stringify(generalData) }
-		})
-
-		const groupList = generalData.map(el => el.course)
-
-		await this.prisma.schedule.upsert({
-			where: { key: groupsKey },
-			create: { key: groupsKey, value: JSON.stringify(groupList) },
-			update: { value: JSON.stringify(groupList) }
-		})
-
-		console.log('****\nupdate completed\n****\n')
+		return {
+			courses: dataToReturn.courses,
+			lecturers: uniq(dataToReturn.lecturers).filter(Boolean)
+		}
 	}
 
-	@Cron(CronExpression.EVERY_HOUR)
-	private async setLecturers() {
-		const data: ISchedule[] = JSON.parse(
-			(
-				await this.prisma.schedule.findUnique({
-					where: { key: schedulesKey }
-				})
-			)?.value || '[]'
-		)
-
-		const flatObj = (value: { [key: string]: [string, string][] }) => {
-			if (!value) return []
-			return Object.values(value).map(el2 => el2.map(el3 => el3[1]))
+	private async parseFromSessionArray(links: string[]): Promise<IInfo> {
+		const dataToReturn: IInfo = {
+			courses: [],
+			lecturers: []
 		}
 
-		const flatArr = (value: [string, string, string][]) => {
-			if (!value) return []
-			return value.flat()
+		for (const link of links) {
+			const session = await parseLink(link)
+
+			dataToReturn.courses.push(...(session?.coursesNames || []))
+
+			await this.prisma.$transaction(
+				dataToReturn.courses.map(course =>
+					this.prisma.board.upsert({
+						where: { course },
+						create: { course },
+						update: {}
+					})
+				)
+			)
+
+			if (session?.coursesNames?.length) {
+				const { coursesNames, dataTable } = session
+
+				for (const [m, course] of Object.entries(coursesNames)) {
+					const col = 1 + +m * 2
+
+					await this.prisma.$transaction(
+						dataTable
+							.filter(
+								row =>
+									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
+							)
+							.map(row => {
+								const rowDate = findDateInText(row[0])
+								const info = parseTextToInfo(row[col], row[col + 1])
+
+								dataToReturn.lecturers.push(info.lecturer)
+
+								return this.prisma.session.upsert({
+									where: {
+										date_boardCourse: { date: rowDate, boardCourse: course }
+									},
+									create: {
+										date: rowDate,
+										daySchedule: { create: info },
+										boardCourse: course
+									},
+									update: {
+										daySchedule: {
+											upsert: {
+												where: {
+													time_sessionDate_sessionBoardCourse: {
+														time: info.time,
+														sessionDate: rowDate,
+														sessionBoardCourse: course
+													}
+												},
+												create: info,
+												update: info
+											}
+										}
+									}
+								})
+							})
+					)
+				}
+			}
 		}
 
-		const lecturersNames = uniq(
-			data
-				.map(el1 => [
-					...flatObj(el1?.schedule?.odd),
-					...flatObj(el1?.schedule?.even),
-					...flatObj(el1?.session),
-					...flatArr(el1?.sessionRepeat)
-				])
-				.flat(2)
-				.map(el => el.match(/[А-Яа-я]+\s{0,1}[А-Яа-я]\.\s{0,1}[А-Яа-я]\./gi))
-				.filter(Boolean)
-				.flat()
-				.sort()
-		)
-
-		await this.prisma.schedule.upsert({
-			where: { key: lecturersKey },
-			create: { key: lecturersKey, value: JSON.stringify(lecturersNames) },
-			update: { value: JSON.stringify(lecturersNames) }
-		})
-	}
-
-	async getTelegrafSessions() {
-		const data = (await this.prisma.telegrafSessions.findMany()).map(
-			el => ((el.session = JSON.parse(el?.session ? el?.session : '{}')), el)
-		)
-
-		return data
+		return {
+			courses: dataToReturn.courses,
+			lecturers: uniq(dataToReturn.lecturers).filter(Boolean)
+		}
 	}
 }

@@ -4,8 +4,8 @@ export const textFromTableCell = (cell: HTMLTableCellElement) => {
 			[...p.querySelectorAll('span')]
 				.map(el => el.textContent.trim())
 				.filter(Boolean)
-				.join(' | ')
+				.join(' ')
 		)
 		.filter(Boolean)
-		.join(' | ')
+		.join(' ')
 }
