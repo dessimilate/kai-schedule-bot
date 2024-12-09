@@ -1,19 +1,37 @@
-import { classroomNames } from '@/constants/classrooms-names.constant'
-import type { IScheduleRow } from '@/types/main.type'
+import {
+	classroomNames,
+	noClassroom
+} from '@/constants/classrooms-names.constant'
+import { deleteFromText } from '@/constants/delete-from-text.constant'
+import { lecturerRegExp } from '@/constants/regexp/lecturer.regexp'
+import { IRowInfo } from '@/types/schedule.type'
 
-export const parseTextToInfo = (time: string, info: string): IScheduleRow => {
-	time = time.replace('.', ':')
+export const parseTextToInfo = (time: string, info: string): IRowInfo => {
+	info = deleteFromText
+		.reduce((res: string, el) => res.replace(el, ''), info)
+		.trim()
 
-	let text: string | string[] = info.match(/^([А-Яа-я]+\s)+/g)
-	text = text ? text[0].trim() : ''
+	time = time ? time.replace('.', ':') : 'неизвестно'
 
-	let lecturer: string | string[] = info.match(
-		/[А-Яа-я]+\s[А-Яа-я]\.[А-Яа-я]\./g
-	)
-	lecturer = lecturer ? lecturer[0].trim() : ''
+	let text: string | string[]
+
+	let lecturer: string | string[] = info.match(lecturerRegExp)
+
+	if (lecturer) {
+		lecturer = lecturer[0].trim()
+
+		const indexLecturer = info.indexOf(lecturer)
+
+		text = info.slice(0, indexLecturer).trim()
+	} else {
+		lecturer = ''
+		text = ''
+	}
 
 	let classroom: string | string[] = info.match(/\([А-Яа-я0-9\s]+\)$/)
-	classroom = classroom ? classroom[0].replace(/\(|\)/g, '').trim() : ''
+	classroom = classroom
+		? classroom[0].replace(/\(|\)/g, '').trim()
+		: noClassroom
 	if (classroomNames[classroom]) classroom = classroomNames[classroom]
 
 	return { time, text, lecturer, classroom }

@@ -1,5 +1,0 @@
-## Start
-
-```bash
-$ yarn dev
-```

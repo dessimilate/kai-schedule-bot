@@ -1,0 +1,1 @@
+export const lecturerRegExp = /[А-Яа-я]+\s?[А-Яа-я]\.[А-Яа-я]\./g

@@ -19,12 +19,14 @@ export class ScheduleMenuService {
 
 		const isNeedOdd = isToday ? isOdd : !day ? !isOdd : isOdd
 
+		const currentDate = format(addDays(new Date(), +!isToday), 'dd.MM')
+
 		const daySchedule = isNeedOdd
 			? await this.prisma.oddWeekSchedule.findUnique({
 					where: {
 						date_boardCourse: {
 							boardCourse: course,
-							date: format(addDays(new Date(), +!isToday), 'dd.MM')
+							date: currentDate
 						}
 					},
 					select: { date: true, daySchedule: true }
@@ -33,24 +35,20 @@ export class ScheduleMenuService {
 					where: {
 						date_boardCourse: {
 							boardCourse: course,
-							date: format(addDays(new Date(), +!isToday), 'dd.MM')
+							date: currentDate
 						}
 					},
 					select: { date: true, daySchedule: true }
 				})
 
-		const dayOfWeek = isToday
-			? getDayOfTheWeek(day)
-			: getDayOfTheWeek(day === 6 ? 0 : day + 1)
+		const text = returnWeekSchedule([
+			{
+				date: currentDate,
+				daySchedule: daySchedule?.daySchedule
+			}
+		])
 
-		if (!daySchedule) {
-			await ctx.reply(`${dayOfWeek} - выходной`, closeButton())
-			return
-		}
-
-		const text = returnDaySchedule(daySchedule.daySchedule)
-
-		await ctx.reply(text, closeButton())
+		await ctx.replyWithHTML(text, closeButton())
 	}
 
 	private async oddEvenSessionSchedule(
@@ -76,7 +74,7 @@ export class ScheduleMenuService {
 						})
 
 		if (!weekSchedule) {
-			await ctx.reply('Расписание отсутствует', closeButton())
+			await ctx.replyWithHTML('🔴 Расписание отсутствует 🔴', closeButton())
 			return
 		}
 

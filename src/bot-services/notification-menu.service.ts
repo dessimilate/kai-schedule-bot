@@ -4,7 +4,7 @@ import { getDayInfo } from '@/utils/dayinfo-utils/get-day-info'
 import { Injectable } from '@nestjs/common'
 import { notificationsButtons } from '@/buttons/notification.buttons'
 import { getMenuOptions } from '@/utils/bot-utils/get-menu-options'
-import { setNotificationTime } from '@/constants/buttons-names.constant'
+import { BUTTON_NAMES } from '@/constants/buttons-names.constant'
 import { closeButton } from '@/buttons/close.button'
 import {
 	editNotificationMenu,
@@ -58,7 +58,7 @@ export class NotificationMenuService {
 	}
 
 	async changeNotificationTime(ctx: Context) {
-		const searchParam = ctx.inlineQuery.query.slice(setNotificationTime.length)
+		const searchParam = ctx.inlineQuery.query.slice(BUTTON_NAMES.setNotificationTime.length)
 		const isCorrectInput = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(searchParam)
 
 		if (searchParam === '14:88') {

@@ -64,7 +64,7 @@ model OddScheduleRow {
   lecturer  String
   classroom String
 
-  dddWeekSchedule            OddWeekSchedule @relation(fields: [oddWeekScheduleDate, oddWeekScheduleBoardCourse], references: [date, boardCourse])
+  oddWeekSchedule            OddWeekSchedule @relation(fields: [oddWeekScheduleDate, oddWeekScheduleBoardCourse], references: [date, boardCourse])
   oddWeekScheduleDate        String          @map("odd_week_schedule_date")
   oddWeekScheduleBoardCourse String          @map("odd_week_schedule_course")
 

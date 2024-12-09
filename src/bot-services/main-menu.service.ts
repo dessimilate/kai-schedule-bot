@@ -11,10 +11,7 @@ import {
 } from '@/utils/bot-utils/schedule-menu'
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@/prisma.service'
-import {
-	changeGroup,
-	findByLecturers
-} from '@/constants/buttons-names.constant'
+import { BUTTON_NAMES } from '@/constants/buttons-names.constant'
 import { coursesKey, lecturersKey } from '@/constants/info-db.constant'
 
 @Injectable()
@@ -77,7 +74,9 @@ export class MainMenuService {
 
 		if (!courses) return
 
-		const searchParams = ctx.inlineQuery.query.slice(changeGroup.length)
+		const searchParams = ctx.inlineQuery.query.slice(
+			BUTTON_NAMES.changeGroup.length
+		)
 
 		await ctx.answerInlineQuery(
 			courses
@@ -86,8 +85,10 @@ export class MainMenuService {
 				.map((name, i) => ({
 					id: String(i),
 					type: 'article',
-					title: `${changeGroup}${name}`,
-					input_message_content: { message_text: `${changeGroup}${name}` }
+					title: `${BUTTON_NAMES.changeGroup}${name}`,
+					input_message_content: {
+						message_text: `${BUTTON_NAMES.changeGroup}${name}`
+					}
 				}))
 		)
 	}
@@ -99,7 +100,9 @@ export class MainMenuService {
 			})
 		).value
 
-		const searchParams = ctx.inlineQuery.query.slice(findByLecturers.length)
+		const searchParams = ctx.inlineQuery.query.slice(
+			BUTTON_NAMES.findByLecturers.length
+		)
 
 		await ctx.answerInlineQuery(
 			lecturers
@@ -108,8 +111,10 @@ export class MainMenuService {
 				.map((name, i) => ({
 					id: String(i),
 					type: 'article',
-					title: `${findByLecturers}${name}`,
-					input_message_content: { message_text: `${findByLecturers}${name}` }
+					title: `${BUTTON_NAMES.findByLecturers}${name}`,
+					input_message_content: {
+						message_text: `${BUTTON_NAMES.findByLecturers}${name}`
+					}
 				}))
 		)
 	}

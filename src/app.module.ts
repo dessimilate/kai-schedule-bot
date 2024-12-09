@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common'
-import { AppController } from '@/app.controller'
-import { AppService } from '@/app.service'
 import { ConfigModule } from '@nestjs/config'
 import { session } from 'telegraf'
 import { TelegrafModule } from 'nestjs-telegraf'
@@ -35,9 +33,8 @@ const store = Postgres({
 		ScheduleM,
 		NotificationModule
 	],
-	controllers: [AppController],
 	providers: [
-		AppService,
+		
 		PrismaService,
 		AppUpdate,
 		MainMenuService,
@@ -45,7 +42,6 @@ const store = Postgres({
 		NotificationMenuService,
 		ChangeGroupService,
 		FindByLecturersService
-	],
-	exports: [AppService]
+	]
 })
 export class AppModule {}

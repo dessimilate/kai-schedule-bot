@@ -1,7 +1,4 @@
-import {
-	findByLecturers,
-	changeGroup
-} from '@/constants/buttons-names.constant'
+import { BUTTON_NAMES } from '@/constants/buttons-names.constant'
 import { Markup } from 'telegraf'
 
 const {
@@ -12,8 +9,11 @@ const {
 export const firstEntryButtons = () =>
 	inlineKeyboard(
 		[
-			switchToCurrentChat('Задать группу', changeGroup),
-			switchToCurrentChat('Поиск по преподавателям', findByLecturers)
+			switchToCurrentChat('Задать группу', BUTTON_NAMES.changeGroup),
+			switchToCurrentChat(
+				'Поиск по преподавателям',
+				BUTTON_NAMES.findByLecturers
+			)
 		],
 		{ columns: 1 }
 	)

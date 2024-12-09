@@ -1,19 +1,9 @@
-export interface IScheduleRow {
-	time: string
-	text: string
-	lecturer: string
-	classroom: string
-}
-
-export interface IDaySchedule {
-	date: string
-	daySchedule: IScheduleRow[]
-}
+import type { ISortedScheduleRow } from './schedule.type'
 
 export interface ISchedule {
 	course: string
-	oddSchedule?: IDaySchedule[]
-	evenSchedule?: IDaySchedule[]
-	session?: IDaySchedule[]
-	sessionRepeat?: IDaySchedule[]
+	oddSchedule?: ISortedScheduleRow[]
+	evenSchedule?: ISortedScheduleRow[]
+	session?: ISortedScheduleRow[]
+	sessionRepeat?: ISortedScheduleRow[]
 }

@@ -10,6 +10,10 @@ export class FindByLecturersService {
 	constructor(private prisma: PrismaService) {}
 
 	async findByLecturers(ctx: Context) {
+		try {
+			await ctx.deleteMessage(ctx.update.message.message_id)
+		} catch {}
+
 		const lecturer = ctx.match[1]
 
 		const lecturersSchedule = await this.prisma.lecturersSchedule.findUnique({
@@ -18,23 +22,19 @@ export class FindByLecturersService {
 		})
 
 		if (!lecturersSchedule.row.length) {
-			await ctx.reply('Нет расписания', closeButton())
+			await ctx.replyWithHTML('🔴 Нет расписания 🔴', closeButton())
 			return
 		}
 
 		const messages = returnLecturersSchedule(lecturersSchedule.row, lecturer)
 
 		if (!messages) {
-			await ctx.reply('Нет расписания', closeButton())
+			await ctx.replyWithHTML('🔴 Нет расписания 🔴', closeButton())
 			return
 		}
 
 		for (const message of messages) {
 			await ctx.replyWithHTML(message, closeButton())
 		}
-
-		try {
-			await ctx.deleteMessage(ctx.update.message.message_id)
-		} catch {}
 	}
 }

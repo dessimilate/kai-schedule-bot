@@ -1,10 +1,4 @@
-import {
-	backToMain,
-	beforeLastLesson,
-	offNotifications,
-	defaultNotifications,
-	setNotificationTime
-} from '@/constants/buttons-names.constant'
+import { BUTTON_NAMES } from '@/constants/buttons-names.constant'
 import { notificationButtonText } from '@/constants/notification-text.constant'
 import { sessionType } from '@/types/context.interface'
 import { Markup } from 'telegraf'
@@ -22,23 +16,23 @@ export const notificationsButtons = ({
 		[
 			callback(
 				notificationButtonText(notification_type, notification_time).off,
-				offNotifications
+				BUTTON_NAMES.offNotifications
 			),
 			callback(
 				notificationButtonText(notification_type, notification_time).default,
-				defaultNotifications
+				BUTTON_NAMES.defaultNotifications
 			),
 			switchToCurrentChat(
 				notificationButtonText(notification_type, notification_time)
 					.atTheCertainTime,
-				setNotificationTime
+				BUTTON_NAMES.setNotificationTime
 			),
 			callback(
 				notificationButtonText(notification_type, notification_time)
 					.duringTheLesson,
-				beforeLastLesson
+				BUTTON_NAMES.beforeLastLesson
 			),
-			callback(`Назад`, backToMain)
+			callback(`Назад`, BUTTON_NAMES.backToMain)
 		],
 		{ columns: 1 }
 	)

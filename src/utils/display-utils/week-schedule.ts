@@ -1,5 +1,8 @@
 import { returnDaySchedule } from '@/utils/display-utils/day-schedule'
 import { getDayOfTheWeek } from '@/utils/dayinfo-utils/day-of-the-week'
+import { compareAsc, format, isBefore, isToday, parse } from 'date-fns'
+import { ru } from 'date-fns/locale'
+import { title } from './title'
 
 export interface IProps {
 	date: string
@@ -13,13 +16,9 @@ export interface IProps {
 
 export const returnWeekSchedule = (props: IProps[]) =>
 	props
-		.map(day => {
-			const [d, m] = day.date.split('.')
-			const dayNum = new Date(new Date().getFullYear(), +m - 1, +d).getDay()
-
-			return [
-				`◀️◀️◀️  ${getDayOfTheWeek(dayNum)} ${day.date}  ▶️▶️▶️`,
-				returnDaySchedule(day.daySchedule)
-			].join('\n\n')
-		})
+		.map(day =>
+			`${title(parse(day.date, 'dd.MM', new Date()))}\n\n`.concat(
+				day.daySchedule ? returnDaySchedule(day.daySchedule) : '🎉 выходной 🎉'
+			)
+		)
 		.join('\n\n')

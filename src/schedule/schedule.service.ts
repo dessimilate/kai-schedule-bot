@@ -2,12 +2,13 @@ import { dayLib } from '@/constants/dayoffs-phrases.constant'
 import { coursesKey, lecturersKey } from '@/constants/info-db.constant'
 import { PrismaService } from '@/prisma.service'
 import { findDateInText } from '@/utils/find-date-in-text'
+import { filterRows } from '@/utils/schedule-utils/filter-rows'
 import { getLinks } from '@/utils/schedule-utils/get-links'
 import { parseLink } from '@/utils/schedule-utils/parse-from-link/parse-link'
+import { parseLinks } from '@/utils/schedule-utils/parse-from-link/parse-links'
 import { parseTextToInfo } from '@/utils/schedule-utils/parse-text-to-info'
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
-import { format } from 'date-fns'
 import { union, uniq } from 'lodash'
 
 export interface IInfo {
@@ -19,9 +20,9 @@ export interface IInfo {
 export class ScheduleService {
 	constructor(private prisma: PrismaService) {}
 
-	@Cron(CronExpression.EVERY_HOUR)
+	@Cron(CronExpression.EVERY_MINUTE)
 	private async setSchedules() {
-		console.log(`${format(new Date(), 'y.MM.dd HH:mm:ss')} - schedule update`)
+		Logger.log('schedule update', 'SCHEDULE')
 
 		const { schedule, session, sessionRepeat } = await getLinks()
 
@@ -30,6 +31,8 @@ export class ScheduleService {
 
 		const { courses: c2, lecturers: l2 } =
 			await this.parseFromSessionArray(session)
+
+		// const {} = await this.parseFromResessionArrays(sessionRepeat)
 
 		const lecturers = union(l1, l2)
 		const courses = union(c1, c2)
@@ -47,12 +50,12 @@ export class ScheduleService {
 			})
 		])
 
-		console.log('schedule update completed\n')
+		Logger.log('schedule update completed', 'SCHEDULE')
 	}
 
-	@Cron(CronExpression.EVERY_HOUR)
+	@Cron(CronExpression.EVERY_MINUTE)
 	private async setLecturersSchedule() {
-		console.log(`${format(new Date(), 'y.MM.dd HH:mm:ss')} - lecturers update`)
+		Logger.log('lecturers schedule update', 'SCHEDULE')
 
 		const lecturers = (
 			await this.prisma.info.findUnique({
@@ -102,7 +105,7 @@ export class ScheduleService {
 					const { course, date, time } = dataElement
 
 					try {
-						this.prisma.lecturersSchedule.upsert({
+						await this.prisma.lecturersSchedule.upsert({
 							where: { lecturer },
 							create: {
 								lecturer,
@@ -119,13 +122,13 @@ export class ScheduleService {
 							}
 						})
 					} catch {
-						console.log(`error with ${course} ${date} ${time}`)
+						// Logger.error(dataElement, 'LECTURERS')
 					}
 				}
 			}
 		}
 
-		console.log('lecturers completed')
+		Logger.log('lecturers schedule update completed', 'SCHEDULE')
 	}
 
 	private getIndexSchedule(index: number) {
@@ -167,45 +170,46 @@ export class ScheduleService {
 				for (const [m, course] of Object.entries(oddCourses)) {
 					const col = 1 + +m * 2
 
-					await this.prisma.$transaction(
-						oddTable
-							.filter(
-								row =>
-									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
-							)
-							.map(row => {
-								const rowDate = findDateInText(row[0])
-								const info = parseTextToInfo(row[col], row[col + 1])
+					const filteredOddTable = filterRows(oddTable, col)
 
-								dataToReturn.lecturers.push(info.lecturer)
+					for (const { rowDate, info } of filteredOddTable) {
+						await this.prisma.oddScheduleRow.deleteMany({
+							where: {
+								oddWeekScheduleDate: rowDate,
+								oddWeekScheduleBoardCourse: course
+							}
+						})
 
-								return this.prisma.oddWeekSchedule.upsert({
-									where: {
-										date_boardCourse: { date: rowDate, boardCourse: course }
-									},
-									create: {
-										date: rowDate,
-										daySchedule: { create: info },
-										boardCourse: course
-									},
-									update: {
-										daySchedule: {
-											upsert: {
-												where: {
-													time_oddWeekScheduleDate_oddWeekScheduleBoardCourse: {
-														time: info.time,
-														oddWeekScheduleDate: rowDate,
-														oddWeekScheduleBoardCourse: course
-													}
-												},
-												create: info,
-												update: info
-											}
+						for (const infoElement of info) {
+							dataToReturn.lecturers.push(infoElement.lecturer)
+
+							await this.prisma.oddWeekSchedule.upsert({
+								where: {
+									date_boardCourse: { date: rowDate, boardCourse: course }
+								},
+								create: {
+									date: rowDate,
+									daySchedule: { create: infoElement },
+									boardCourse: course
+								},
+								update: {
+									daySchedule: {
+										upsert: {
+											where: {
+												time_oddWeekScheduleDate_oddWeekScheduleBoardCourse: {
+													time: infoElement.time,
+													oddWeekScheduleDate: rowDate,
+													oddWeekScheduleBoardCourse: course
+												}
+											},
+											create: infoElement,
+											update: infoElement
 										}
 									}
-								})
+								}
 							})
-					)
+						}
+					}
 				}
 			}
 
@@ -215,46 +219,46 @@ export class ScheduleService {
 				for (const [m, course] of Object.entries(evenCourses)) {
 					const col = 1 + +m * 2
 
-					await this.prisma.$transaction(
-						evenTable
-							.filter(
-								row =>
-									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
-							)
-							.map(row => {
-								const rowDate = findDateInText(row[0])
-								const info = parseTextToInfo(row[col], row[col + 1])
+					const filteredEvenTable = filterRows(evenTable, col)
 
-								dataToReturn.lecturers.push(info.lecturer)
+					for (const { rowDate, info } of filteredEvenTable) {
+						await this.prisma.evenScheduleRow.deleteMany({
+							where: {
+								evenWeekScheduleDate: rowDate,
+								evenWeekScheduleBoardCourse: course
+							}
+						})
 
-								return this.prisma.evenWeekSchedule.upsert({
-									where: {
-										date_boardCourse: { date: rowDate, boardCourse: course }
-									},
-									create: {
-										date: rowDate,
-										daySchedule: { create: info },
-										boardCourse: course
-									},
-									update: {
-										daySchedule: {
-											upsert: {
-												where: {
-													time_evenWeekScheduleDate_evenWeekScheduleBoardCourse:
-														{
-															time: info.time,
-															evenWeekScheduleDate: rowDate,
-															evenWeekScheduleBoardCourse: course
-														}
-												},
-												create: info,
-												update: info
-											}
+						for (const infoElement of info) {
+							dataToReturn.lecturers.push(infoElement.lecturer)
+
+							await this.prisma.evenWeekSchedule.upsert({
+								where: {
+									date_boardCourse: { date: rowDate, boardCourse: course }
+								},
+								create: {
+									date: rowDate,
+									daySchedule: { create: infoElement },
+									boardCourse: course
+								},
+								update: {
+									daySchedule: {
+										upsert: {
+											where: {
+												time_evenWeekScheduleDate_evenWeekScheduleBoardCourse: {
+													time: infoElement.time,
+													evenWeekScheduleDate: rowDate,
+													evenWeekScheduleBoardCourse: course
+												}
+											},
+											create: infoElement,
+											update: infoElement
 										}
 									}
-								})
+								}
 							})
-					)
+						}
+					}
 				}
 			}
 		}
@@ -292,46 +296,120 @@ export class ScheduleService {
 				for (const [m, course] of Object.entries(coursesNames)) {
 					const col = 1 + +m * 2
 
-					await this.prisma.$transaction(
-						dataTable
-							.filter(
-								row =>
-									row[col] && row[col + 1] && !dayLib.includes(row[col + 1])
-							)
-							.map(row => {
-								const rowDate = findDateInText(row[0])
-								const info = parseTextToInfo(row[col], row[col + 1])
+					const filteredSessionTable = filterRows(dataTable, col)
 
-								dataToReturn.lecturers.push(info.lecturer)
+					for (const { rowDate, info } of filteredSessionTable) {
+						await this.prisma.sessionRow.deleteMany({
+							where: {
+								sessionDate: rowDate,
+								sessionBoardCourse: course
+							}
+						})
 
-								return this.prisma.session.upsert({
-									where: {
-										date_boardCourse: { date: rowDate, boardCourse: course }
-									},
-									create: {
-										date: rowDate,
-										daySchedule: { create: info },
-										boardCourse: course
-									},
-									update: {
-										daySchedule: {
-											upsert: {
-												where: {
-													time_sessionDate_sessionBoardCourse: {
-														time: info.time,
-														sessionDate: rowDate,
-														sessionBoardCourse: course
-													}
-												},
-												create: info,
-												update: info
-											}
+						for (const infoElement of info) {
+							dataToReturn.lecturers.push(infoElement.lecturer)
+
+							await this.prisma.session.upsert({
+								where: {
+									date_boardCourse: { date: rowDate, boardCourse: course }
+								},
+								create: {
+									date: rowDate,
+									daySchedule: { create: infoElement },
+									boardCourse: course
+								},
+								update: {
+									daySchedule: {
+										upsert: {
+											where: {
+												time_sessionDate_sessionBoardCourse: {
+													time: infoElement.time,
+													sessionDate: rowDate,
+													sessionBoardCourse: course
+												}
+											},
+											create: infoElement,
+											update: infoElement
 										}
 									}
-								})
+								}
 							})
-					)
+						}
+					}
 				}
+			}
+		}
+
+		return {
+			courses: dataToReturn.courses,
+			lecturers: uniq(dataToReturn.lecturers).filter(Boolean)
+		}
+	}
+
+	private async parseFromResessionArrays(link: string): Promise<IInfo> {
+		const dataToReturn: IInfo = {
+			courses: [],
+			lecturers: []
+		}
+
+		const resession = await parseLinks(link)
+
+		for (const element of resession) {
+			const { coursesNames, dataTable } = element
+
+			dataToReturn.courses.push(...coursesNames)
+
+			await this.prisma.$transaction(
+				coursesNames.map(course =>
+					this.prisma.board.upsert({
+						where: { course },
+						create: { course },
+						update: {}
+					})
+				)
+			)
+
+			dataTable.splice(0, 1)
+
+			for (const [m, course] of Object.entries(coursesNames)) {
+				const col = +m * 3
+
+				await this.prisma.$transaction(
+					dataTable
+						.filter(row => row[col + 2])
+						.map(row => {
+							const rowDate = row[col]
+							const info = parseTextToInfo(row[col + 1], row[col + 2])
+
+							dataToReturn.lecturers.push(info.lecturer)
+
+							return this.prisma.resession.upsert({
+								where: {
+									date_boardCourse: { date: rowDate, boardCourse: course }
+								},
+								create: {
+									date: rowDate,
+									daySchedule: { create: info },
+									boardCourse: course
+								},
+								update: {
+									daySchedule: {
+										upsert: {
+											where: {
+												time_resessionDate_resessionBoardCourse: {
+													time: info.time,
+													resessionDate: rowDate,
+													resessionBoardCourse: course
+												}
+											},
+											create: info,
+											update: info
+										}
+									}
+								}
+							})
+						})
+				)
 			}
 		}
 
